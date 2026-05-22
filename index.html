@@ -358,10 +358,38 @@ async function uploadToDrive(index) {
 
   showUpload('☁ Uploading to Google Drive…', 50);
   try {
-    const resp = await fetch(GAS_URL, {
+    async function uploadToDrive(index) {
+  const blob = blobs[index];
+  if (!blob) return;
+  const filename = 'boame_response_'+pad(index+1)+'.webm';
+
+  showUpload('⏳ Encoding audio…', 20);
+  const b64 = await blobToBase64(blob);
+
+  showUpload('☁ Uploading to Google Drive…', 50);
+  try {
+    await fetch(GAS_URL, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      mode: 'no-cors',
+      headers: {'Content-Type': 'text/plain'},
       body: JSON.stringify({
+        filename,
+        mimeType: 'audio/webm',
+        data: b64,
+        twi: responses[index].twi,
+        english: responses[index].en,
+        index: index + 1,
+        timestamp: new Date().toISOString(),
+        project: 'BoaMe-Twi-TTS'
+      })
+    });
+    showUpload('✅ Saved to Google Drive!', 100, 'success');
+    return true;
+  } catch(err) {
+    showUpload('❌ Upload failed: '+err.message, 100, 'error');
+    return false;
+  }
+}
         filename,
         mimeType: 'audio/webm',
         data: b64,
