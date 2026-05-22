@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BoaMe — Twi Response Recorder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F2EFE9; min-height: 100vh; padding: 0 0 40px; }
+
+  .app-header {
+    background: white;
+    padding: 16px 20px;
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 1px solid #E8E4DC;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .app-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: #0A6B4B;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .app-title { font-size: 17px; font-weight: 600; color: #1A1A1A; }
+  .app-sub { font-size: 13px; color: #888; margin-top: 1px; }
+
+  .session-card {
+    background: white;
+    margin: 16px;
+    border-radius: 20px;
+    padding: 20px;
+  }
+  .session-label { font-size: 11px; font-weight: 600; color: #888; letter-spacing: 1px; text-transform: uppercase; }
+  .session-title { font-size: 26px; font-weight: 700; color: #1A1A1A; margin: 6px 0 16px; }
+  .done-badge {
+    float: right; margin-top: 6px;
+    background: #F2EFE9; border-radius: 20px;
+    padding: 6px 14px; font-size: 13px; font-weight: 500; color: #555;
+  }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .stat-box { background: #F2EFE9; border-radius: 14px; padding: 14px 16px; }
+  .stat-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .stat-val { font-size: 24px; font-weight: 700; color: #0A6B4B; }
+  .prog-track { background: #E8E4DC; border-radius: 4px; height: 6px; margin-top: 4px; overflow: hidden; }
+  .prog-fill { height: 100%; background: #0A6B4B; border-radius: 4px; transition: width 0.4s; }
+  .prog-row { display: flex; justify-content: space-between; font-size: 12px; color: #888; margin-top: 8px; }
+
+  .rec-card {
+    background: white;
+    margin: 0 16px 16px;
+    border-radius: 20px;
+    padding: 20px;
+  }
+  .rec-label { font-size: 11px; font-weight: 600; color: #888; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+  .filename-box {
+    background: #F2EFE9; border-radius: 10px;
+    padding: 10px 14px; font-size: 13px;
+    font-family: 'Courier New', monospace; color: #555;
+    margin-bottom: 14px;
+  }
+  .twi-box {
+    background: #F2EFE9; border-radius: 14px;
+    padding: 24px 20px; text-align: center;
+    margin-bottom: 10px;
+  }
+  .twi-text { font-size: 20px; font-weight: 600; color: #1A1A1A; line-height: 1.4; margin-bottom: 8px; }
+  .eng-text { font-size: 14px; color: #888; }
+  .nav-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .nav-row button { flex: 1; padding: 12px; border-radius: 12px; border: 1.5px solid #E8E4DC; background: white; font-size: 14px; font-weight: 500; color: #555; cursor: pointer; }
+  .nav-row button:hover { background: #F2EFE9; }
+  .nav-row button:disabled { opacity: 0.3; cursor: default; }
+
+  .mic-area { display: flex; flex-direction: column; align-items: center; padding: 20px 0 10px; }
+  .mic-btn {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: #0A6B4B; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; transition: transform 0.15s, background 0.15s;
+    box-shadow: 0 4px 20px rgba(10,107,75,0.3);
+  }
+  .mic-btn:hover { transform: scale(1.05); }
+  .mic-btn.recording { background: #C0392B; box-shadow: 0 4px 20px rgba(192,57,43,0.4); animation: recpulse 1s infinite; }
+  .mic-btn.done { background: #0A6B4B; }
+  @keyframes recpulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+  .mic-hint { font-size: 13px; color: #888; margin-top: 12px; }
+  .mic-timer { font-size: 22px; font-weight: 700; color: #C0392B; margin-top: 6px; min-height: 30px; }
+
+  .playback-area { background: #F2EFE9; border-radius: 14px; padding: 14px 16px; margin-top: 12px; display: none; }
+  .playback-area.visible { display: block; }
+  .playback-row { display: flex; align-items: center; gap: 12px; }
+  .play-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #0A6B4B; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: white; flex-shrink: 0;
+  }
+  .playback-label { font-size: 13px; color: #555; flex: 1; }
+  .dl-btn {
+    padding: 8px 14px; border-radius: 10px;
+    background: #0A6B4B; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 500; color: white;
+  }
+
+  .bottom-bar {
+    background: white;
+    margin: 0 16px;
+    border-radius: 20px;
+    padding: 16px 20px;
+    display: flex; gap: 10px;
+  }
+  .bottom-bar button {
+    flex: 1; padding: 14px;
+    border-radius: 14px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600;
+  }
+  .btn-skip { background: #F2EFE9; color: #555; }
+  .btn-next { background: #0A6B4B; color: white; }
+  .btn-next:disabled { opacity: 0.4; cursor: default; }
+
+  .all-done {
+    text-align: center; padding: 40px 20px;
+    display: none;
+  }
+  .all-done h2 { font-size: 26px; font-weight: 700; margin-bottom: 10px; color: #1A1A1A; }
+  .all-done p { color: #888; margin-bottom: 24px; font-size: 15px; }
+  .dl-all-btn {
+    background: #0A6B4B; color: white;
+    border: none; border-radius: 16px;
+    padding: 18px 32px; font-size: 16px; font-weight: 600;
+    cursor: pointer; width: 100%;
+  }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div class="app-icon">🎙</div>
+  <div>
+    <div class="app-title">BoaMe</div>
+    <div class="app-sub">Twi response recording portal</div>
+  </div>
+</div>
+
+<div id="mainView">
+  <div class="session-card">
+    <div class="session-label">Session</div>
+    <span class="done-badge" id="doneBadge">0 / 20 done</span>
+    <div class="session-title">BoaMe · TWI</div>
+    <div class="stats">
+      <div class="stat-box">
+        <div class="stat-label">Recorded</div>
+        <div class="stat-val" id="recCount">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Remaining</div>
+        <div class="stat-val" id="remCount">20</div>
+      </div>
+    </div>
+    <div class="prog-track">
+      <div class="prog-fill" id="progFill" style="width:0%"></div>
+    </div>
+    <div class="prog-row">
+      <span id="progText">0 / 20 complete</span>
+      <span id="progPct">0%</span>
+    </div>
+  </div>
+
+  <div class="rec-card">
+    <div class="rec-label">Recording</div>
+    <div class="filename-box" id="filename">boame_response_01.wav</div>
+    <div class="twi-box">
+      <div class="twi-text" id="twiText">Loading...</div>
+      <div class="eng-text" id="engText">Loading...</div>
+    </div>
+    <div class="nav-row">
+      <button id="prevBtn" onclick="prev()" disabled>← Previous</button>
+      <button id="nextBtn" onclick="next()">Next →</button>
+    </div>
+    <div class="mic-area">
+      <button class="mic-btn" id="micBtn" onclick="toggleRecord()">🎤</button>
+      <div class="mic-hint" id="micHint">Tap to record</div>
+      <div class="mic-timer" id="micTimer"></div>
+    </div>
+    <div class="playback-area" id="playbackArea">
+      <div class="playback-row">
+        <button class="play-btn" onclick="playRec()">▶</button>
+        <span class="playback-label">Recording saved — tap to play</span>
+        <button class="dl-btn" onclick="dlCurrent()">Download</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <button class="btn-skip" onclick="skip()">Skip</button>
+    <button class="btn-next" id="saveNextBtn" onclick="saveAndNext()" disabled>Save & Next</button>
+  </div>
+</div>
+
+<div class="all-done" id="allDone">
+  <div style="font-size:60px;margin-bottom:16px">🎉</div>
+  <h2>All recordings done!</h2>
+  <p>You have recorded all 20 BoaMe Twi responses. Download all files and upload them to Google Drive.</p>
+  <button class="dl-all-btn" onclick="dlAll()">⬇ Download all 20 recordings</button>
+</div>
+
+<script>
+const responses = [
+  {twi:"Akwaaba. Kasa na mɛboa wo.", en:"Welcome. Speak and I will help you."},
+  {twi:"Sika ahe na wopɛ sɛ wo sendi?", en:"How much do you want to send?"},
+  {twi:"Hwan na wopɛ sɛ sendi sika ma?", en:"Who do you want to send money to?"},
+  {twi:"Wopɛ sɛ sendi sika GHS [amount] kɔma [name]. Ɛyɛ ampa?", en:"You want to send GHS [amount] to [name]. Correct?"},
+  {twi:"Sika GHS [amount] no akɔma [name]. Meda wo ase.", en:"GHS [amount] sent to [name]. Thank you."},
+  {twi:"Yɛde transaction no agyae. Wopɛ sɛ yɛyɛ biribi foforɔ?", en:"Transaction cancelled. Want to do something else?"},
+  {twi:"Minte aseɛ yiye. Mepa wo kyɛw san ka biom.", en:"I did not understand. Please say it again."},
+  {twi:"Sika a ɛwɔ wo akaunt mu yɛ GHS [amount].", en:"Your balance is GHS [amount]."},
+  {twi:"Credit ahe na wopɛ sɛ wotɔ?", en:"How much airtime do you want to buy?"},
+  {twi:"Credit GHS [amount] aba wo fon no so. Meda wo ase.", en:"GHS [amount] credit loaded. Thank you."},
+  {twi:"Hwan na wopɛ sɛ wo frɛ?", en:"Who do you want to call?"},
+  {twi:"Yɛrefrɛ [name] wɔ [network] seisei. Hwɛ wo fon no.", en:"Calling [name] on [network] now. Watch your phone."},
+  {twi:"Bɔ din na number a wopɛ sɛ kora no.", en:"Say the name and number to save."},
+  {twi:"[name] akora. Wode frɛ no '[name]' seisei.", en:"[name] saved. You can call them by name now."},
+  {twi:"PIN namba no nyɛ correct. Bɔ PIN namba no biom.", en:"Wrong PIN. Please enter your PIN again."},
+  {twi:"Mepa wo kyɛw ka wo PIN namba.", en:"Please say your PIN number."},
+  {twi:"Ka bɛn na wopɛ sɛ wotua? ECG, Ghana Water, anaa DSTV?", en:"Which bill? ECG, Ghana Water, or DSTV?"},
+  {twi:"Mepa wo kyɛw ka wo akaunt namba.", en:"Please say your account number."},
+  {twi:"Meda wo ase. Bye Bye.", en:"Thank you. Goodbye."},
+  {twi:"Cross-network fee: [amount] pesewas. Wopɛ sɛ to so?", en:"Cross-network fee: [amount] pesewas. Continue?"},
+];
+
+let current = 0;
+const blobs = {};
+let recorder = null;
+let recStream = null;
+let timerInterval = null;
+let recSeconds = 0;
+
+function pad(n){ return String(n).padStart(2,'0'); }
+
+function updateUI() {
+  const r = responses[current];
+  document.getElementById('twiText').textContent = r.twi;
+  document.getElementById('engText').textContent = r.en;
+  document.getElementById('filename').textContent = 'boame_response_'+pad(current+1)+'.wav';
+  document.getElementById('prevBtn').disabled = current === 0;
+  document.getElementById('nextBtn').disabled = current === responses.length - 1;
+  const hasBl = !!blobs[current];
+  document.getElementById('playbackArea').className = 'playback-area'+(hasBl?' visible':'');
+  document.getElementById('saveNextBtn').disabled = !hasBl;
+  const n = Object.keys(blobs).length;
+  document.getElementById('recCount').textContent = n;
+  document.getElementById('remCount').textContent = 20 - n;
+  document.getElementById('progFill').style.width = (n/20*100)+'%';
+  document.getElementById('progText').textContent = n+' / 20 complete';
+  document.getElementById('progPct').textContent = Math.round(n/20*100)+'%';
+  document.getElementById('doneBadge').textContent = n+' / 20 done';
+}
+
+async function toggleRecord() {
+  if (recorder && recorder.state === 'recording') {
+    stopRec();
+    return;
+  }
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const chunks = [];
+    recorder = new MediaRecorder(recStream);
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+      blobs[current] = new Blob(chunks, {type:'audio/webm'});
+      recStream.getTracks().forEach(t=>t.stop());
+      clearInterval(timerInterval);
+      document.getElementById('micTimer').textContent = '';
+      document.getElementById('micBtn').className = 'mic-btn done';
+      document.getElementById('micBtn').textContent = '✓';
+      document.getElementById('micHint').textContent = 'Recorded — tap to re-record';
+      updateUI();
+    };
+    recorder.start();
+    recSeconds = 0;
+    document.getElementById('micBtn').className = 'mic-btn recording';
+    document.getElementById('micBtn').textContent = '⏹';
+    document.getElementById('micHint').textContent = 'Recording... tap to stop';
+    timerInterval = setInterval(() => {
+      recSeconds++;
+      document.getElementById('micTimer').textContent = '0:'+pad(recSeconds);
+    }, 1000);
+  } catch(e) {
+    alert('Please allow microphone access to record.');
+  }
+}
+
+function stopRec() {
+  if (recorder) recorder.stop();
+}
+
+function playRec() {
+  if (blobs[current]) new Audio(URL.createObjectURL(blobs[current])).play();
+}
+
+function dlCurrent() {
+  if (!blobs[current]) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blobs[current]);
+  a.download = 'boame_response_'+pad(current+1)+'.webm';
+  a.click();
+}
+
+function saveAndNext() {
+  if (current < responses.length - 1) {
+    current++;
+    resetMic();
+    updateUI();
+  } else {
+    checkAllDone();
+  }
+}
+
+function skip() {
+  if (current < responses.length - 1) {
+    current++;
+    resetMic();
+    updateUI();
+  }
+}
+
+function prev() {
+  if (current > 0) { current--; resetMic(); updateUI(); }
+}
+
+function next() {
+  if (current < responses.length - 1) { current++; resetMic(); updateUI(); }
+}
+
+function resetMic() {
+  document.getElementById('micBtn').className = 'mic-btn';
+  document.getElementById('micBtn').textContent = '🎤';
+  document.getElementById('micHint').textContent = 'Tap to record';
+  document.getElementById('micTimer').textContent = '';
+}
+
+function checkAllDone() {
+  if (Object.keys(blobs).length === 20) {
+    document.getElementById('mainView').style.display = 'none';
+    document.getElementById('allDone').style.display = 'block';
+  }
+}
+
+function dlAll() {
+  const ids = Object.keys(blobs);
+  ids.forEach((id, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blobs[parseInt(id)]);
+      a.download = 'boame_response_'+pad(parseInt(id)+1)+'.webm';
+      a.click();
+    }, i * 400);
+  });
+}
+
+updateUI();
+</script>
+</body>
+</html>
