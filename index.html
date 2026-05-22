@@ -101,6 +101,19 @@
     font-size: 13px; font-weight: 500; color: white;
   }
 
+  /* Upload status */
+  .upload-status {
+    margin-top: 14px; padding: 14px 16px;
+    background: #F2EFE9; border-radius: 14px;
+    display: none;
+  }
+  .upload-status.visible { display: block; }
+  .upload-bar-track { background: #E8E4DC; border-radius: 4px; height: 5px; overflow: hidden; margin-bottom: 8px; }
+  .upload-bar-fill { height: 100%; background: #0A6B4B; border-radius: 4px; width: 0%; transition: width 0.4s; }
+  .upload-msg { font-size: 13px; color: #555; }
+  .upload-msg.success { color: #0A6B4B; font-weight: 600; }
+  .upload-msg.error { color: #C0392B; font-weight: 600; }
+
   .bottom-bar {
     background: white;
     margin: 0 16px;
@@ -167,7 +180,7 @@
 
   <div class="rec-card">
     <div class="rec-label">Recording</div>
-    <div class="filename-box" id="filename">boame_response_01.wav</div>
+    <div class="filename-box" id="filename">boame_response_01.webm</div>
     <div class="twi-box">
       <div class="twi-text" id="twiText">Loading...</div>
       <div class="eng-text" id="engText">Loading...</div>
@@ -188,6 +201,14 @@
         <button class="dl-btn" onclick="dlCurrent()">Download</button>
       </div>
     </div>
+
+    <!-- Upload status bar -->
+    <div class="upload-status" id="uploadStatus">
+      <div class="upload-bar-track">
+        <div class="upload-bar-fill" id="uploadBarFill"></div>
+      </div>
+      <div class="upload-msg" id="uploadMsg">Uploading...</div>
+    </div>
   </div>
 
   <div class="bottom-bar">
@@ -199,11 +220,13 @@
 <div class="all-done" id="allDone">
   <div style="font-size:60px;margin-bottom:16px">🎉</div>
   <h2>All recordings done!</h2>
-  <p>You have recorded all 20 BoaMe Twi responses. Download all files and upload them to Google Drive.</p>
-  <button class="dl-all-btn" onclick="dlAll()">⬇ Download all 20 recordings</button>
+  <p>All 20 BoaMe Twi responses have been uploaded to Google Drive!</p>
+  <button class="dl-all-btn" onclick="dlAll()">⬇ Download all locally too</button>
 </div>
 
 <script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwWRS9XlWzlEO0zHF0YiJnpBjtyQss8Aw9qePxX__lMSrToqJgmt3scfAn0RH-AfWAu-g/exec';
+
 const responses = [
   {twi:"Akwaaba. Kasa na mɛboa wo.", en:"Welcome. Speak and I will help you."},
   {twi:"Sika ahe na wopɛ sɛ wo sendi?", en:"How much do you want to send?"},
@@ -233,6 +256,7 @@ let recorder = null;
 let recStream = null;
 let timerInterval = null;
 let recSeconds = 0;
+let uploading = false;
 
 function pad(n){ return String(n).padStart(2,'0'); }
 
@@ -240,12 +264,13 @@ function updateUI() {
   const r = responses[current];
   document.getElementById('twiText').textContent = r.twi;
   document.getElementById('engText').textContent = r.en;
-  document.getElementById('filename').textContent = 'boame_response_'+pad(current+1)+'.wav';
+  document.getElementById('filename').textContent = 'boame_response_'+pad(current+1)+'.webm';
   document.getElementById('prevBtn').disabled = current === 0;
   document.getElementById('nextBtn').disabled = current === responses.length - 1;
   const hasBl = !!blobs[current];
   document.getElementById('playbackArea').className = 'playback-area'+(hasBl?' visible':'');
-  document.getElementById('saveNextBtn').disabled = !hasBl;
+  document.getElementById('saveNextBtn').disabled = !hasBl || uploading;
+  document.getElementById('uploadStatus').className = 'upload-status';
   const n = Object.keys(blobs).length;
   document.getElementById('recCount').textContent = n;
   document.getElementById('remCount').textContent = 20 - n;
@@ -305,14 +330,80 @@ function dlCurrent() {
   a.click();
 }
 
-function saveAndNext() {
-  if (current < responses.length - 1) {
-    current++;
-    resetMic();
-    updateUI();
-  } else {
-    checkAllDone();
+/* ── Google Drive upload ── */
+function blobToBase64(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
+  });
+}
+
+function showUpload(msg, pct, type='') {
+  document.getElementById('uploadStatus').className = 'upload-status visible';
+  document.getElementById('uploadBarFill').style.width = pct+'%';
+  const el = document.getElementById('uploadMsg');
+  el.textContent = msg;
+  el.className = 'upload-msg '+type;
+}
+
+async function uploadToDrive(index) {
+  const blob = blobs[index];
+  if (!blob) return;
+  const filename = 'boame_response_'+pad(index+1)+'.webm';
+
+  showUpload('⏳ Encoding audio…', 20);
+  const b64 = await blobToBase64(blob);
+
+  showUpload('☁ Uploading to Google Drive…', 50);
+  try {
+    const resp = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        filename,
+        mimeType: 'audio/webm',
+        data: b64,
+        twi: responses[index].twi,
+        english: responses[index].en,
+        index: index + 1,
+        timestamp: new Date().toISOString(),
+        project: 'BoaMe-Twi-TTS'
+      })
+    });
+    showUpload('Processing…', 80);
+    const json = await resp.json();
+    if (json.status === 'ok' || json.result === 'success' || json.fileId || json.id) {
+      showUpload('✅ Saved to Google Drive!', 100, 'success');
+      return true;
+    } else {
+      throw new Error(json.message || json.error || 'Upload failed');
+    }
+  } catch(err) {
+    showUpload('❌ Upload failed: '+err.message, 100, 'error');
+    return false;
   }
+}
+
+async function saveAndNext() {
+  if (!blobs[current] || uploading) return;
+  uploading = true;
+  document.getElementById('saveNextBtn').disabled = true;
+
+  await uploadToDrive(current);
+
+  uploading = false;
+
+  setTimeout(() => {
+    if (current < responses.length - 1) {
+      current++;
+      resetMic();
+      updateUI();
+    } else {
+      checkAllDone();
+    }
+  }, 1500);
 }
 
 function skip() {
